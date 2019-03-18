@@ -1,0 +1,86 @@
+import tensorflow as tf
+import tensorflow_probability as tfp
+import numpy  as np
+import matplotlib.pyplot as pplot
+
+import sklearn.datasets
+
+points = sklearn.datasets.make_moons(1000, noise = 0.04);
+
+
+# VAE for two moons datasets:
+
+ninp_raw = 2;
+ninp = 200;
+nlatent = 40
+minibatch_size = 1000;
+layers = [[ninp,nlatent*2], [nlatent,ninp_raw]]
+
+x_in = tf.placeholder(dtype = tf.float32, shape = [None,ninp_raw])
+
+# non-trainable high-dimensional embedding:
+
+w_nt = tf.Variable(np.exp(-1j * np.random.randn(ninp_raw,ninp)),dtype=tf.float32,trainable = False)
+
+w1 = tf.Variable(np.random.randn(layers[0][0],layers[0][1])*0.1,dtype=tf.float32)
+b1 = tf.Variable(np.random.randn(1,layers[0][1])*0.1,dtype=tf.float32)
+
+L1 = tf.nn.tanh((x_in @w_nt) @ w1 + b1)
+L1 = tf.contrib.layers.layer_norm(L1)
+
+
+kl_beta = tf.placeholder(shape = [1], dtype = tf.float32, name = 'kl_beta')
+std = L1[:,:nlatent]
+mean = L1[:,nlatent:]
+D = tfp.distributions.MultivariateNormalDiag(loc = mean,scale_diag = std*kl_beta[0]);
+D_prior = tfp.distributions.MultivariateNormalDiag(loc = tf.zeros([1,nlatent]), scale_diag = tf.ones([1,nlatent]));
+
+
+
+w2 = tf.Variable(np.random.randn(layers[1][0],layers[1][1]),dtype = tf.float32)
+b2 = tf.Variable(np.random.randn(1,layers[1][1]),dtype= tf.float32)
+
+L2 = tf.identity(tf.reduce_mean(D.sample([1]),0)  @ w2 + b2)
+
+
+# add losses:
+kl_div = tf.reduce_mean(tfp.distributions.kl_divergence(D_prior, D))
+loss = tf.reduce_mean(tf.reduce_mean(tf.squared_difference(x_in,L2),axis = 0))
+
+optimizer = tf.train.AdamOptimizer(learning_rate = 0.001)
+train_op = optimizer.minimize(loss + kl_div * kl_beta)
+
+
+tot_losses = [];
+with tf.Session() as sess:
+    
+    #sess.run(tf.initialize_all_variables())
+    sess.run(tf.global_variables_initializer())
+    for  i in range(0,100000):
+        rperm = np.random.permutation(points[0].shape[0])
+        for batch_ids in rperm.reshape([-1,minibatch_size]):
+
+            val = [float((i%1000))/1000.*0.05 + 0.0001] ;
+            opt, l , kl = sess.run([train_op , loss,kl_div] , feed_dict = {x_in : points[0][batch_ids,:], kl_beta : val})
+            print('loss: {} kl: {}'.format(l,kl))
+            tot_losses.append([l,kl])
+            if np.isnan(l):
+                print('nans!')
+                break
+
+        v = L2.eval(feed_dict = {x_in : points[0], kl_beta : val})
+        if i % 100 == 0:
+            pplot.subplot(1,2,1)
+            pplot.cla()
+            pplot.plot(points[0][:,0], points[0][:,1],'.')
+            pplot.plot(v[:,0],v[:,1],'.')
+            pplot.subplot(1,2,2)
+            pplot.cla()
+            pplot.plot(tot_losses)
+            pplot.pause(0.1);
+            pplot.show(block = False)
+            
+        
+        #print('loss: {} kl: {}'.format(loss, kl))
+
+

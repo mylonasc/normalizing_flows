@@ -1,11 +1,13 @@
 import tensorflow as tf
 import numpy as np
 
-def make_st(io_size, midsize = 20, n_interm = 1, activation = tf.nn.tanh):
+def make_st(io_size, midsize = 20, n_interm = 1, activation = tf.nn.leaky_relu):
     """
     a function to make the scale and shift neural networks for the realNVP.
     The scale and shift transformations are implemented as dense networks (in the
     original paper they were CNNs)
+
+    This is an alternative to the tensorflow implementation of "default_templates" for nvp bijectors.
     """
     s = tf.keras.Sequential()
     s.add(tf.keras.layers.Dense(midsize,input_dim = io_size))
