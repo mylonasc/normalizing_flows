@@ -70,12 +70,12 @@ class nvp_flow(object):
         Initially implemented as a 2D toy density estimation 
         assuming the second axis as the vector size axis.
         """
-        code.interact(local = dict(locals(), **globals()))
+        #code.interact(local = dict(locals(), **globals()))
         x1,x2 = self.get_split(x)
         y1  = x1 
         y2  = x2 * tf.exp(self.s(x1)) + self.t(x1)
         y = [y1,y2]
-        yy = tf.concat(y,axis=1)
+        yy = tf.concat(y,axis=-1)
         yy = tf.gather(yy, indices = self.index_order,axis = -1)
 
         return yy
@@ -84,8 +84,6 @@ class nvp_flow(object):
         """
         there must be a better way of doing this.
         """
-        #import pdb
-        #pdb.set_trace()
         y1,y2 = self.get_split(y)
 
         x1  = y1;
@@ -183,6 +181,24 @@ class nvp_stack(object):
         # the nvp layers are defined from z to x (no need to reverse order)
         
         return self.base_var
+
+    def apply_inverse(self,x):
+        """
+        in general z is not known. 
+        The inverse transformations are usually applied to a variable to get to "z"
+        At the "z" space we can easilly compute likelihoods (we define a simple 
+        distribution there). The purpose of the flow is to warp the space so that 
+        the datapoints have a high likelihood under a simple prior  "z".
+
+        This function is used when transforming from "z" to "x".
+        """
+        x_next = x
+
+        # The reversed order is the order from "z" to "x":
+        for nvp_layer in reversed(self.nvp_layers):
+            x_next = nvp_layer.inverse(x_next)
+
+        return x_next
 
     def forward(self,z):
         """
