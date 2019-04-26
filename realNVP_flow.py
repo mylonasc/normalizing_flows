@@ -2,7 +2,28 @@ import tensorflow as tf
 import numpy as np
 import code
 
-def make_st(st_io_shape, midsize = 20, n_interm = 1, activation = tf.nn.leaky_relu):
+from tensorflow.keras.layers import Layer
+from tensorflow.keras.initializers import Ones, Zeros
+import tensorflow.keras.backend as K
+
+class LayerNormalization(Layer):
+	def __init__(self, eps=1e-6, **kwargs):
+		self.eps = eps
+		super(LayerNormalization, self).__init__(**kwargs)
+	def build(self, input_shape):
+		self.gamma = self.add_weight(name='gamma', shape=input_shape[-1:],
+									 initializer=Ones(), trainable=True)
+		self.beta = self.add_weight(name='beta', shape=input_shape[-1:],
+									initializer=Zeros(), trainable=True)
+		super(LayerNormalization, self).build(input_shape)
+	def call(self, x):
+		mean = K.mean(x, axis=-1, keepdims=True)
+		std = K.std(x, axis=-1, keepdims=True)
+		return self.gamma * (x - mean) / (std + self.eps) + self.beta
+	def compute_output_shape(self, input_shape):
+		return input_shape
+
+def make_st(st_io_shape, midsize = 20, n_interm = 1, activation = tf.nn.leaky_relu,layer_norm = False):
     """
     a function to make the scale and shift neural networks for the realNVP.
     The scale and shift transformations are implemented as dense networks (in the
@@ -19,12 +40,20 @@ def make_st(st_io_shape, midsize = 20, n_interm = 1, activation = tf.nn.leaky_re
         g = tf.keras.Sequential()
         g.add(tf.keras.layers.Dense(midsize,input_dim = st_io_shape[0]))
         g.add(tf.keras.layers.Activation(activation))
+        if layer_norm:
+            g.add(LayerNormalization())
+
         for k in range(0,n_interm):
             g.add(tf.keras.layers.Dense(midsize,input_dim = midsize))
             g.add(tf.keras.layers.Activation(activation))
+            if layer_norm:
+                g.add(LayerNormalization())
 
         g.add(tf.keras.layers.Dense(st_io_shape[1],input_dim = midsize))
         g.add(tf.keras.layers.Activation(activation))
+        if layer_norm:
+            g.add(LayerNormalization())
+
         return g
 
     t = make_seq_stack()
